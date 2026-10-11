@@ -13,7 +13,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import jenkins.model.TransientActionFactory;
 import net.sf.json.JSONObject;
-import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest2;
 
@@ -59,9 +58,14 @@ public class TestResultsAnalyzerExtension extends TransientActionFactory<Job>
         private boolean hideConfigurationMethods = false;
         private String runTimeLowThreshold = "0.5";
         private String runTimeHighThreshold = "1.0";
+        private DuplicateTestPolicy duplicateTestPolicy = DuplicateTestPolicy.DEFAULT;
 
         private static final String passFailString = "passfail";
         private static final String runtimeString = "runtime";
+        private static final String passRateString = "passrate";
+        private static final String COUNT_BY_TESTS = "tests";
+        private static final String COUNT_BY_CLASSES = "classes";
+        private static final String COUNT_BY_PACKAGES = "packages";
         private boolean useCustomStatusNames;
         private String passedRepresentation = "PASSED";
         private String failedRepresentation = "FAILED";
@@ -77,6 +81,16 @@ public class TestResultsAnalyzerExtension extends TransientActionFactory<Job>
         // true = Show Test Runtimes in Charts instead of Passes and Failures
         private String chartDataType = passFailString;
 
+        /** What builds are labelled by on the analyzer page: their number, display name or date. */
+        private String buildLabel = BUILD_LABEL_NAME;
+
+        static final String BUILD_LABEL_NUMBER = "number";
+        static final String BUILD_LABEL_NAME = "name";
+        static final String BUILD_LABEL_DATE = "date";
+
+        // What the pass and fail charts count: tests, classes or packages
+        private String chartCountBy = COUNT_BY_TESTS;
+
         public DescriptorImpl() {
             // jenkins actually will edit your program's memory and set variables
             load();
@@ -89,6 +103,9 @@ public class TestResultsAnalyzerExtension extends TransientActionFactory<Job>
 
         @Override
         public boolean configure(StaplerRequest2 req, JSONObject formData) {
+            duplicateTestPolicy = parseDuplicateTestPolicy(formData.optString("duplicateTestPolicy"));
+            buildLabel = buildLabel(formData.optString("buildLabel"));
+            chartCountBy = chartCountBy(formData.optString("chartCountBy"));
             try {
                 noOfBuilds = formData.getString("noOfBuilds");
                 noOfRunsToFetch = formData.getInt("noOfRunsToFetch");
@@ -180,12 +197,58 @@ public class TestResultsAnalyzerExtension extends TransientActionFactory<Job>
             return chartDataType;
         }
 
+        /** How to show a test that was executed more than once in a build. */
+        public DuplicateTestPolicy getDuplicateTestPolicy() {
+            return duplicateTestPolicy != null ? duplicateTestPolicy : DuplicateTestPolicy.DEFAULT;
+        }
+
+        public void setDuplicateTestPolicy(DuplicateTestPolicy duplicateTestPolicy) {
+            this.duplicateTestPolicy = duplicateTestPolicy;
+        }
+
+        public DuplicateTestPolicy[] getDuplicateTestPolicies() {
+            return DuplicateTestPolicy.values();
+        }
+
+        private static DuplicateTestPolicy parseDuplicateTestPolicy(String value) {
+            for (DuplicateTestPolicy policy : DuplicateTestPolicy.values()) {
+                if (policy.name().equals(value)) {
+                    return policy;
+                }
+            }
+            return DuplicateTestPolicy.DEFAULT;
+        }
+
+        /** One of {@code number}, {@code name} or {@code date}. */
+        public String getBuildLabel() {
+            return buildLabel(buildLabel);
+        }
+
+        /** Settings saved before the option existed have no value, so builds are labelled by name. */
+        private static String buildLabel(String value) {
+            return BUILD_LABEL_NUMBER.equals(value) || BUILD_LABEL_DATE.equals(value) ? value : BUILD_LABEL_NAME;
+        }
+
+        /** One of {@code tests}, {@code classes} or {@code packages}. */
+        public String getChartCountBy() {
+            return chartCountBy(chartCountBy);
+        }
+
+        /** Settings saved before the option existed have no value, so test cases are counted. */
+        private static String chartCountBy(String value) {
+            return COUNT_BY_CLASSES.equals(value) || COUNT_BY_PACKAGES.equals(value) ? value : COUNT_BY_TESTS;
+        }
+
         public String getPassFailString() {
             return passFailString;
         }
 
         public String getRuntimeString() {
             return runtimeString;
+        }
+
+        public String getPassRateString() {
+            return passRateString;
         }
 
         public String getPassedRepresentation() {
@@ -253,7 +316,7 @@ public class TestResultsAnalyzerExtension extends TransientActionFactory<Job>
         }
 
         private FormValidation intValidation(String value) {
-            if (StringUtils.isBlank(value)) return FormValidation.error("Entered value should not be empty");
+            if (value == null || value.isBlank()) return FormValidation.error("Entered value should not be empty");
 
             try {
                 Integer.valueOf(value);
@@ -264,7 +327,7 @@ public class TestResultsAnalyzerExtension extends TransientActionFactory<Job>
         }
 
         private FormValidation valueValidation(String value) {
-            if (StringUtils.isBlank(value)) return FormValidation.error("Entered value should not be empty");
+            if (value == null || value.isBlank()) return FormValidation.error("Entered value should not be empty");
             Pattern regex = Pattern.compile("[<>{}*\\\"\'$&+,:;=?@#|]");
             Matcher matcher = regex.matcher(value);
             if (matcher.find()) return FormValidation.error("Entered value should not have special characters.");
@@ -288,7 +351,7 @@ public class TestResultsAnalyzerExtension extends TransientActionFactory<Job>
         }
 
         private FormValidation colorValidation(String value) {
-            if (StringUtils.isBlank(value)) return FormValidation.error("Entered value should not be empty");
+            if (value == null || value.isBlank()) return FormValidation.error("Entered value should not be empty");
             final String HEX_PATTERN = "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$";
             Pattern regex = Pattern.compile(HEX_PATTERN);
             Matcher matcher = regex.matcher(value);

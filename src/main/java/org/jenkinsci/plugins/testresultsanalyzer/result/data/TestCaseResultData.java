@@ -4,8 +4,14 @@ import hudson.tasks.test.TestResult;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Locale;
+import org.jenkinsci.plugins.testresultsanalyzer.DuplicateTestPolicy;
+import org.jenkinsci.plugins.testresultsanalyzer.ResultStatus;
 
 public class TestCaseResultData extends ResultData {
+
+    public TestCaseResultData(String name, boolean failed, boolean skipped, float duration, String url) {
+        super(name, 1, failed && !skipped ? 1 : 0, failed || skipped ? 0 : 1, skipped ? 1 : 0, duration, url);
+    }
 
     public TestCaseResultData(TestResult testResult, String url) {
         setName(testResult.getName());
@@ -42,5 +48,22 @@ public class TestCaseResultData extends ResultData {
         setTotalTimeTaken(testResult.getDuration());
         setUrl(url);
         evaluateStatus();
+    }
+
+    /**
+     * Merges two executions of the same test in one build into a single result, whose status (and URL) is that of
+     * the execution chosen by {@code policy} and whose duration is their sum.
+     */
+    public static TestCaseResultData merge(ResultData first, ResultData second, DuplicateTestPolicy policy) {
+        ResultData chosen = policy.prefers(second.getStatus(), first.getStatus()) ? second : first;
+        String status = chosen.getStatus();
+        TestCaseResultData merged = new TestCaseResultData(
+                first.getName(),
+                ResultStatus.FAILED.getValue().equals(status),
+                ResultStatus.SKIPPED.getValue().equals(status),
+                first.getTotalTimeTaken() + second.getTotalTimeTaken(),
+                chosen.getUrl());
+        merged.setConfig(first.isConfig());
+        return merged;
     }
 }

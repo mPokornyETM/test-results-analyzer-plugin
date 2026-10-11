@@ -91,6 +91,24 @@ public abstract class ResultData {
     // Used for constructing mock object
     public ResultData() {}
 
+    protected ResultData(
+            String name,
+            int totalTests,
+            int totalFailed,
+            int totalPassed,
+            int totalSkipped,
+            float duration,
+            String url) {
+        setName(name);
+        setTotalTests(totalTests);
+        setTotalFailed(totalFailed);
+        setTotalPassed(totalPassed);
+        setTotalSkipped(totalSkipped);
+        setTotalTimeTaken(duration);
+        setUrl(url);
+        evaluateStatus();
+    }
+
     public ResultData(TestObject result, String url) {
         setName(result.getName());
         setTotalTests(result.getTotalCount());
@@ -99,6 +117,31 @@ public abstract class ResultData {
         setTotalSkipped(result.getSkipCount());
         setTotalTimeTaken(result.getDuration());
         setUrl(url);
+        evaluateStatus();
+    }
+
+    /**
+     * Adds the counts and duration of another result of the same package or class in the same build, for when it
+     * was reported more than once.
+     */
+    public void add(ResultData other) {
+        totalTests += other.totalTests;
+        totalFailed += other.totalFailed;
+        totalPassed += other.totalPassed;
+        totalSkipped += other.totalSkipped;
+        totalTimeTaken += other.totalTimeTaken;
+        evaluateStatus();
+    }
+
+    /**
+     * Corrects the counts of this parent result after two executions of one of its tests, which it counted
+     * separately, were merged into a single result. The duration is left alone as the merged result sums them.
+     */
+    public void mergedChild(ResultData first, ResultData second, ResultData merged) {
+        totalTests += merged.totalTests - first.totalTests - second.totalTests;
+        totalFailed += merged.totalFailed - first.totalFailed - second.totalFailed;
+        totalPassed += merged.totalPassed - first.totalPassed - second.totalPassed;
+        totalSkipped += merged.totalSkipped - first.totalSkipped - second.totalSkipped;
         evaluateStatus();
     }
 

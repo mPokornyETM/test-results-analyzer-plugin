@@ -1,12 +1,42 @@
 package org.jenkinsci.plugins.testresultsanalyzer.result.info;
 
 import hudson.tasks.test.TabulatedResult;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import org.jenkinsci.plugins.testresultsanalyzer.DuplicateTestPolicy;
 
 public class ResultInfo {
 
     private Map<String, PackageInfo> packageResults = new TreeMap<String, PackageInfo>();
+    private final DuplicateTestPolicy duplicateTestPolicy;
+
+    public ResultInfo() {
+        this(DuplicateTestPolicy.DEFAULT);
+    }
+
+    /**
+     * @param duplicateTestPolicy how to merge executions of the same test within one build
+     */
+    public ResultInfo(DuplicateTestPolicy duplicateTestPolicy) {
+        this.duplicateTestPolicy = duplicateTestPolicy;
+    }
+
+    public DuplicateTestPolicy getDuplicateTestPolicy() {
+        return duplicateTestPolicy;
+    }
+
+    private final Map<Integer, BuildInfo> builds = new HashMap<>();
+
+    /** Records the number, display name and date of a build whose results were loaded. */
+    public void addBuild(BuildInfo build) {
+        builds.put(build.number(), build);
+    }
+
+    /** The details of a loaded build, or {@code null} if they were not recorded. */
+    public BuildInfo getBuild(int buildNumber) {
+        return builds.get(buildNumber);
+    }
 
     public void addPackage(Integer buildNumber, TabulatedResult packageResult, String url) {
         String packageName = packageResult.getName();
@@ -18,8 +48,19 @@ public class ResultInfo {
             packageInfo.setName(packageName);
         }
         packageInfo.putPackageResult(
-                buildNumber, packageResult, url + getResultUrl(packageResult) + "/" + packageResult.getSafeName());
+                buildNumber,
+                packageResult,
+                url + getResultUrl(packageResult) + "/" + packageResult.getSafeName(),
+                duplicateTestPolicy);
         packageResults.put(packageName, packageInfo);
+    }
+
+    public PackageInfo getOrCreatePackage(String packageName) {
+        return packageResults.computeIfAbsent(packageName, name -> {
+            PackageInfo packageInfo = new PackageInfo();
+            packageInfo.setName(name);
+            return packageInfo;
+        });
     }
 
     public Map<String, PackageInfo> getPackageResults() {
